@@ -551,15 +551,27 @@ function Tasks({ token, user, logout, navigate }) {
             </div>
             <span style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>TaskFlow</span>
           </div>
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer', fontSize: '14px' }}
-            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <LogOut style={{ width: '16px', height: '16px' }} />
-            Logout
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {user && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '13px', fontWeight: '700' }}>
+                  {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                </div>
+                <span style={{ fontSize: '14px', color: '#374151', fontWeight: '500' }}>
+                  Hello, <strong style={{ color: '#7c3aed' }}>{user.name ? user.name.split(' ')[0] : 'there'}</strong>
+                </span>
+              </div>
+            )}
+            <button
+              onClick={() => { logout(); navigate('/login'); }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer', fontSize: '14px' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <LogOut style={{ width: '16px', height: '16px' }} />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

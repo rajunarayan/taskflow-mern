@@ -1,6 +1,6 @@
-🚀 TaskPilot — Full-Stack MERN Task Manager
+🚀 TaskFlow — Full-Stack MERN Task Manager
 
-TaskPilot is a production-ready full-stack task management application built using the MERN stack.
+TaskFlow is a production-ready full-stack task management application built using the MERN stack.
 It features user authentication, task CRUD operations, pagination, filtering, and a clean modern UI.
 
 The application is fully deployed with a Dockerized backend, cloud database, and separate frontend hosting.
