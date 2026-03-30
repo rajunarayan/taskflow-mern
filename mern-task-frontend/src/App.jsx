@@ -25,9 +25,9 @@
 
 // */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Routes, Route, Navigate, useNavigate, Link } from 'react-router-dom';
-import { Pencil, Check, X, Trash2 } from 'lucide-react';
+import { Pencil, Check, X, Trash2, Plus, Loader2, ListFilter, ArrowUpDown, Hash, ChevronLeft, ChevronRight, Circle, CheckSquare, LogOut, ArrowRight } from 'lucide-react';
 
 
 
@@ -64,6 +64,46 @@ async function apiFetch(path, token, opts = {}) {
   }
 }
 
+// ── Lightweight toast system ─────────────────────────────────────
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const idRef = useRef(0);
+
+  const toast = useCallback((message, type = 'success') => {
+    const id = ++idRef.current;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  }, []);
+
+  return { toasts, toast };
+}
+
+function Toaster({ toasts }) {
+  if (!toasts.length) return null;
+  return (
+    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className="animate-fadeIn"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '12px 18px', borderRadius: '12px', boxShadow: '0 8px 24px rgba(139,92,246,0.15)',
+            background: t.type === 'error' ? '#fef2f2' : '#f5f3ff',
+            border: `1px solid ${t.type === 'error' ? '#fecaca' : '#ddd6fe'}`,
+            color: t.type === 'error' ? '#dc2626' : '#7c3aed',
+            fontSize: '14px', fontWeight: '500', minWidth: '220px',
+          }}
+        >
+          <span style={{ fontSize: '16px' }}>{t.type === 'error' ? '✕' : '✓'}</span>
+          {t.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
 export default function App() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -87,71 +127,61 @@ export default function App() {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-[#fafafa] p-6 flex items-start justify-center">
-      <div className="max-w-4xl mx-auto">
-        <Header user={user} onLogout={logout} />
+    <Routes>
+      <Route
+        path="/"
+        element={<Navigate to={token ? "/tasks" : "/login"} />}
+      />
 
-        <div className="mt-6">
-          <Routes>
-            <Route
-              path="/"
-              element={<Navigate to={token ? "/tasks" : "/login"} />}
+      <Route
+        path="/login"
+        element={
+          token ? (
+            <Navigate to="/tasks" />
+          ) : (
+            <AuthForm
+              mode="login"
+              onSuccess={({ token: t }) => {
+                setToken(t);
+                navigate('/tasks');
+              }}
+              switchToRegister={() => navigate('/register')}
             />
+          )
+        }
+      />
 
-            <Route
-              path="/login"
-              element={
-                token ? (
-                  <Navigate to="/tasks" />
-                ) : (
-                  <AuthForm
-                    mode="login"
-                    onSuccess={({ token: t }) => {
-                      setToken(t);
-                      navigate('/tasks');
-                    }}
-                    switchToRegister={() => navigate('/register')}
-                  />
-                )
-              }
+      <Route
+        path="/register"
+        element={
+          token ? (
+            <Navigate to="/tasks" />
+          ) : (
+            <AuthForm
+              mode="register"
+              onSuccess={({ token: t }) => {
+                setToken(t);
+                navigate('/tasks');
+              }}
+              switchToLogin={() => navigate('/login')}
             />
+          )
+        }
+      />
 
-            <Route
-              path="/register"
-              element={
-                token ? (
-                  <Navigate to="/tasks" />
-                ) : (
-                  <AuthForm
-                    mode="register"
-                    onSuccess={({ token: t }) => {
-                      setToken(t);
-                      navigate('/tasks');
-                    }}
-                    switchToLogin={() => navigate('/login')}
-                  />
-                )
-              }
-            />
-
-            <Route
-              path="/tasks"
-              element={
-                token ? (
-                  <Tasks token={token} user={user} />
-                ) : (
-                  <Navigate to="/login" />
-                )
-              }
-            />
-          </Routes>
-        </div>
-      </div>
-    </div>
+      <Route
+        path="/tasks"
+        element={
+          token ? (
+            <Tasks token={token} user={user} logout={logout} navigate={navigate} />
+          ) : (
+            <Navigate to="/login" />
+          )
+        }
+      />
+    </Routes>
   );
 }
-
-import { CheckSquare, LogOut } from 'lucide-react';
 
 function Header({ user, onLogout }) {
   const navigate = useNavigate();
@@ -162,7 +192,7 @@ function Header({ user, onLogout }) {
       <div className="flex items-center gap-2">
         <CheckSquare className="w-6 h-6 text-gray-900" />
         <h1 className="text-xl font-semibold tracking-tight">
-          TaskPilot
+          TaskFlow
         </h1>
       </div>
 
@@ -222,43 +252,31 @@ function AuthForm({ mode, onSuccess, switchToRegister, switchToLogin }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [fieldErrors, setFieldErrors] = useState({});
 
-  const validate = () => {
-    const errs = {};
+  const isLogin = mode === 'login';
 
-    if (mode === 'register' && !name.trim()) {
-      errs.name = 'Name is required';
-    }
-
-    if (!email.trim()) {
-      errs.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      errs.email = 'Invalid email format';
-    }
-
-    if (!password.trim()) {
-      errs.password = 'Password is required';
-    }
-
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-
-  const submit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
-    // 👉 FRONTEND VALIDATION
-    if (!validate()) return;
+    // Front-end validation
+    if (!isLogin && !name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      setError('A valid email is required');
+      return;
+    }
+    if (!password.trim()) {
+      setError('Password is required');
+      return;
+    }
 
     setLoading(true);
 
-    const path = mode === 'login' ? '/auth/login' : '/auth/register';
-    const body = mode === 'login'
-      ? { email, password }
-      : { name, email, password };
+    const path = isLogin ? '/auth/login' : '/auth/register';
+    const body = isLogin ? { email, password } : { name, email, password };
 
     const res = await apiFetch(path, null, {
       method: 'POST',
@@ -268,7 +286,6 @@ function AuthForm({ mode, onSuccess, switchToRegister, switchToLogin }) {
     setLoading(false);
 
     if (res.ok) {
-      setFieldErrors({});   // clear inline errors
       onSuccess(res.body);
     } else {
       if (res.body && res.body.errors) {
@@ -281,152 +298,158 @@ function AuthForm({ mode, onSuccess, switchToRegister, switchToLogin }) {
     }
   };
 
-
   return (
-    <div className="w-full max-w-md mt-20 bg-white rounded-2xl shadow-sm border p-8 animate-fadeIn">
-      <h2 className="text-2xl font-semibold mb-1">
-        {mode === 'login' ? 'Welcome back 👋' : 'Create your account ✨'}
-      </h2>
-
-      <p className="text-sm text-gray-500 mb-6">
-        {mode === 'login'
-          ? 'Login to manage your tasks'
-          : 'Start organizing your work with TaskPilot'}
-      </p>
-
-      {error && (
-        <div className="mb-4 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={submit} className="space-y-4">
-        {mode === 'register' && (
-          <div className="relative">
-            <label className="block text-sm mb-1 text-gray-700">Name</label>
-
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Your name"
-              className={`w-full px-4 py-2 rounded-xl border bg-white
-        transition-all duration-200
-        focus:outline-none focus:ring-2 focus:ring-gray-900/10
-        ${fieldErrors.name
-                  ? 'border-amber-400 bg-amber-50/40'
-                  : 'border-gray-200 hover:border-gray-300'
-                }`}
+    <div className="min-h-screen bg-white flex w-full">
+      {/* Left Panel - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-[#8b5cf6] relative overflow-hidden items-center justify-center">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#7c3aed] via-[#8b5cf6] to-[#a78bfa]" />
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full border border-white/30"
+              style={{
+                width: `${200 + i * 150}px`,
+                height: `${200 + i * 150}px`,
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+              }}
             />
-
-            {fieldErrors.name && (
-              <p className="mt-1 text-xs text-amber-600 flex items-center gap-1 animate-fade-in">
-                <span>⚠</span>
-                {fieldErrors.name}
-              </p>
-            )}
+          ))}
+        </div>
+        <div className="relative z-10 text-center px-12">
+          <div className="inline-flex items-center gap-3 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <CheckSquare className="w-8 h-8 text-white" />
+            </div>
           </div>
-        )}
-
-
-        <div className="relative">
-          <label className="block text-sm mb-1 text-gray-700">Email</label>
-
-          <input
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className={`w-full px-4 py-2 rounded-xl border bg-white
-      transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-gray-900/10
-      ${fieldErrors.email
-                ? 'border-amber-400 bg-amber-50/40'
-                : 'border-gray-200 hover:border-gray-300'
-              }`}
-          />
-
-          {fieldErrors.email && (
-            <p className="mt-1 text-xs text-amber-600 flex items-center gap-1 animate-fade-in">
-              <span>⚠</span>
-              {fieldErrors.email}
-            </p>
-          )}
+          <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
+            TaskFlow
+          </h1>
+          <p className="text-white/90 text-lg max-w-md mx-auto">
+            Organize your tasks beautifully. Stay productive, stay focused.
+          </p>
         </div>
+      </div>
 
+      {/* Right Panel - Form */}
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-md animate-fadeIn">
+          <div className="lg:hidden flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 rounded-xl bg-[#8b5cf6] flex items-center justify-center">
+              <CheckSquare className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-2xl font-bold text-gray-900">TaskFlow</span>
+          </div>
 
-        <div className="relative">
-          <label className="block text-sm mb-1 text-gray-700">Password</label>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            {isLogin ? "Welcome back" : "Create account"}
+          </h2>
+          <p className="text-gray-500 mb-8">
+            {isLogin
+              ? "Enter your credentials to access your tasks"
+              : "Sign up to start managing your tasks"}
+          </p>
 
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-            className={`w-full px-4 py-2 rounded-xl border bg-white
-      transition-all duration-200
-      focus:outline-none focus:ring-2 focus:ring-gray-900/10
-      ${fieldErrors.password
-                ? 'border-amber-400 bg-amber-50/40'
-                : 'border-gray-200 hover:border-gray-300'
-              }`}
-          />
-
-          {fieldErrors.password && (
-            <p className="mt-1 text-xs text-amber-600 flex items-center gap-1 animate-fade-in">
-              <span>⚠</span>
-              {fieldErrors.password}
-            </p>
+          {error && (
+            <div className="mb-6 text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl border border-red-100 animate-fadeIn">
+              {error}
+            </div>
           )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {!isLogin && (
+              <div className="space-y-1.5">
+                <label htmlFor="name" className="text-sm font-medium text-gray-700">
+                  Full Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full h-11 px-4 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#8b5cf6]/30 focus:border-[#8b5cf6] transition-all"
+                  required={!isLogin}
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-sm font-medium text-gray-700">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full h-11 px-4 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#8b5cf6]/30 focus:border-[#8b5cf6] transition-all"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full h-11 px-4 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#8b5cf6]/30 focus:border-[#8b5cf6] transition-all"
+                required
+                minLength={6}
+              />
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 flex items-center justify-center gap-2 mt-4 rounded-xl bg-[#8b5cf6] text-white font-semibold hover:bg-[#7c3aed] transition-colors disabled:opacity-70"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  {isLogin ? "Sign In" : "Create Account"}
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-8 text-center text-sm">
+            <button
+              type="button"
+              onClick={isLogin ? switchToRegister : switchToLogin}
+              className="text-[#8b5cf6] font-medium hover:underline transition-all"
+            >
+              {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+            </button>
+          </div>
         </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full mt-4 py-2.5 rounded-xl bg-gray-900 text-white font-medium hover:scale-[1.01] transition disabled:opacity-60"
-        >
-          {loading
-            ? 'Please wait...'
-            : mode === 'login'
-              ? 'Login'
-              : 'Create account'}
-        </button>
-      </form>
-
-      <div className="mt-6 text-sm text-center">
-        {mode === 'login' ? (
-          <button
-            type="button"
-            onClick={switchToRegister}
-            className="text-gray-600 hover:underline"
-          >
-            Don’t have an account? Sign up
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={switchToLogin}
-            className="text-gray-600 hover:underline"
-          >
-            Already have an account? Login
-          </button>
-        )}
       </div>
     </div>
   );
 }
 
-function Tasks({ token, user }) {
+function Tasks({ token, user, logout, navigate }) {
+  const { toasts, toast } = useToast();
   const [tasks, setTasks] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [completedFilter, setCompletedFilter] = useState('all'); // all | true | false
-  const [sortOrder, setSortOrder] = useState('desc'); // desc | asc
+  const [completedFilter, setCompletedFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState('desc');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(5);
+  const welcomeShown = useRef(false);
 
 
 
@@ -444,6 +467,7 @@ function Tasks({ token, user }) {
     setLoading(false);
     if (r.ok) {
       setTasks(r.body.tasks || []);
+      setTotal(r.body.total || 0);
     } else {
       setError('Failed to load tasks');
     }
@@ -451,281 +475,276 @@ function Tasks({ token, user }) {
 
 
   useEffect(() => {
-    if (token) fetchTasks();
+    if (token) {
+      fetchTasks();
+      if (!welcomeShown.current) {
+        welcomeShown.current = true;
+        toast('Welcome back! 👋');
+      }
+    }
   }, [token, completedFilter, sortOrder, page, limit]);
 
 
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
   const createTask = async (e) => {
     e && e.preventDefault();
+    if (!title.trim()) return;
     setError(null);
+    setAdding(true);
     const r = await apiFetch('/tasks', token, { method: 'POST', body: JSON.stringify({ title, description }) });
+    setAdding(false);
     if (r.ok) {
       setTitle(''); setDescription('');
       fetchTasks();
+      toast('Task added!');
     } else {
-      setError((r.body && (r.body.message || (r.body.errors && r.body.errors.map(x => x.msg).join(', ')))) || 'Create failed');
+      const msg = (r.body && (r.body.message || (r.body.errors && r.body.errors.map(x => x.msg).join(', ')))) || 'Create failed';
+      toast(msg, 'error');
     }
   };
 
   const toggleComplete = async (task) => {
     const r = await apiFetch(`/tasks/${task._id}`, token, { method: 'PUT', body: JSON.stringify({ completed: !task.completed }) });
-    if (r.ok) fetchTasks();
-    else setError('Update failed');
+    if (r.ok) {
+      fetchTasks();
+      toast(task.completed ? 'Marked as incomplete' : 'Task completed! ✓');
+    } else {
+      toast('Failed to update task', 'error');
+    }
   };
 
   const removeTask = async (task) => {
-    if (!confirm('Delete this task?')) return;
     const r = await apiFetch(`/tasks/${task._id}`, token, { method: 'DELETE' });
-    if (r.ok) fetchTasks();
-    else setError('Delete failed');
-  };
-
-  const startEdit = (task) => {
-    setEditingId(task._id);
-    setEditTitle(task.title);
-    setEditDescription(task.description || '');
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditTitle('');
-    setEditDescription('');
-  };
-
-  const saveEdit = async (task) => {
-    const r = await apiFetch(`/tasks/${task._id}`, token, {
-      method: 'PUT',
-      body: JSON.stringify({
-        title: editTitle,
-        description: editDescription,
-      }),
-    });
-
     if (r.ok) {
       fetchTasks();
-      cancelEdit();
+      toast('Task deleted');
     } else {
-      setError('Update failed');
+      toast('Failed to delete task', 'error');
     }
   };
 
 
+  const filterOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'true', label: 'Done' },
+    { value: 'false', label: 'To Do' },
+  ];
+
+  const sortOptions = [
+    { value: 'desc', label: 'Newest' },
+    { value: 'asc', label: 'Oldest' },
+  ];
+
+  const perPageOptions = [5, 10];
+
   return (
-    <div className="bg-white p-6 rounded shadow">
-      <h2 className="text-lg font-medium mb-4">Tasks for {user ? user.name : 'you'}</h2>
+    <div className="min-h-screen" style={{ background: '#f4f4f6' }}>
+      <Toaster toasts={toasts} />
 
-      <form
-        onSubmit={createTask}
-        className="mb-6 rounded-2xl bg-yellow-50 border border-yellow-200 p-4 shadow-sm"
-      >
-        <div className="flex flex-col gap-3">
-          <input
-            className="w-full bg-transparent border-b border-yellow-300 focus:border-yellow-500 outline-none px-1 py-2 text-sm placeholder-yellow-600"
-            placeholder="✍️ Task title"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
+      {/* Header */}
+      <header style={{ borderBottom: '1px solid #e5e7eb', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div className="max-w-3xl mx-auto px-4" style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CheckSquare style={{ width: '20px', height: '20px', color: 'white' }} />
+            </div>
+            <span style={{ fontSize: '20px', fontWeight: '700', color: '#111827' }}>TaskFlow</span>
+          </div>
+          <button
+            onClick={() => { logout(); navigate('/login'); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#6b7280', cursor: 'pointer', fontSize: '14px' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#f3f4f6'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <LogOut style={{ width: '16px', height: '16px' }} />
+            Logout
+          </button>
+        </div>
+      </header>
 
-          <textarea
-            className="w-full bg-transparent border-b border-yellow-300 focus:border-yellow-500 outline-none px-1 py-2 text-sm placeholder-yellow-600 resize-none"
-            placeholder="Optional description…"
-            rows={2}
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-          />
+      <main className="max-w-3xl mx-auto px-4" style={{ paddingTop: '32px', paddingBottom: '48px' }}>
 
-          <div className="flex justify-end">
+        {/* Add Task Form */}
+        <form
+          onSubmit={createTask}
+          style={{ background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '24px', marginBottom: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}
+        >
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '16px' }}>Add New Task</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <input
+              placeholder="Task title..."
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              required
+              style={{ height: '44px', padding: '0 14px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#f9fafb', fontSize: '14px', outline: 'none', width: '100%', boxSizing: 'border-box', transition: 'border-color 0.2s' }}
+              onFocus={e => e.target.style.borderColor = '#8b5cf6'}
+              onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+            />
+            <textarea
+              placeholder="Description (optional)"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#f9fafb', fontSize: '14px', outline: 'none', resize: 'none', width: '100%', boxSizing: 'border-box', minHeight: '80px', transition: 'border-color 0.2s' }}
+              onFocus={e => e.target.style.borderColor = '#8b5cf6'}
+              onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+            />
+            <div>
+              <button
+                type="submit"
+                disabled={adding || !title.trim()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '8px', background: adding || !title.trim() ? '#c4b5fd' : '#8b5cf6', color: 'white', border: 'none', fontWeight: '600', fontSize: '14px', cursor: adding || !title.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}
+              >
+                {adding ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : <Plus style={{ width: '16px', height: '16px' }} />}
+                Add Task
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {error && (
+          <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '14px' }}>
+            {error}
+          </div>
+        )}
+
+        {/* Filters */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
+
+          {/* Status filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '4px' }}>
+            <ListFilter style={{ width: '16px', height: '16px', color: '#9ca3af', marginLeft: '8px' }} />
+            {filterOptions.map(f => (
+              <button
+                key={f.value}
+                onClick={() => { setPage(1); setCompletedFilter(f.value); }}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', fontSize: '13px', fontWeight: '500', cursor: 'pointer', background: completedFilter === f.value ? '#8b5cf6' : 'transparent', color: completedFilter === f.value ? 'white' : '#6b7280', transition: 'all 0.15s' }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sort */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '4px' }}>
+            <ArrowUpDown style={{ width: '16px', height: '16px', color: '#9ca3af', marginLeft: '8px' }} />
+            {sortOptions.map(s => (
+              <button
+                key={s.value}
+                onClick={() => setSortOrder(s.value)}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', fontSize: '13px', fontWeight: '500', cursor: 'pointer', background: sortOrder === s.value ? '#8b5cf6' : 'transparent', color: sortOrder === s.value ? 'white' : '#6b7280', transition: 'all 0.15s' }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Per page */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '4px' }}>
+            <Hash style={{ width: '16px', height: '16px', color: '#9ca3af', marginLeft: '8px' }} />
+            {perPageOptions.map(n => (
+              <button
+                key={n}
+                onClick={() => { setPage(1); setLimit(n); }}
+                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', fontSize: '13px', fontWeight: '500', cursor: 'pointer', background: limit === n ? '#8b5cf6' : 'transparent', color: limit === n ? 'white' : '#6b7280', transition: 'all 0.15s' }}
+              >
+                {n}/pg
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Task List */}
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', paddingTop: '80px', paddingBottom: '80px' }}>
+            <Loader2 style={{ width: '32px', height: '32px', color: '#8b5cf6', animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : tasks.length === 0 ? (
+          <div style={{ textAlign: 'center', paddingTop: '80px', paddingBottom: '80px' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <CheckSquare style={{ width: '32px', height: '32px', color: '#8b5cf6' }} />
+            </div>
+            <p style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>No tasks yet</p>
+            <p style={{ color: '#6b7280', fontSize: '14px' }}>Add your first task above to get started</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {tasks.map(t => (
+              <div
+                key={t._id}
+                className="task-card"
+                style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'flex-start', gap: '12px', transition: 'box-shadow 0.2s', opacity: t.completed ? 0.7 : 1 }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+              >
+                {/* Toggle button */}
+                <button
+                  onClick={() => toggleComplete(t)}
+                  style={{ marginTop: '2px', width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: t.completed ? 'none' : '2px solid #d1d5db', background: t.completed ? '#8b5cf6' : 'transparent', color: t.completed ? 'white' : 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={e => { if (!t.completed) { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.color = '#8b5cf6'; } }}
+                  onMouseLeave={e => { if (!t.completed) { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = 'transparent'; } }}
+                >
+                  {t.completed ? <Check style={{ width: '14px', height: '14px' }} /> : <Circle style={{ width: '12px', height: '12px' }} />}
+                </button>
+
+                {/* Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: '600', color: t.completed ? '#9ca3af' : '#111827', textDecoration: t.completed ? 'line-through' : 'none', marginBottom: '2px' }}>
+                    {t.title}
+                  </p>
+                  {t.description && (
+                    <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {t.description}
+                    </p>
+                  )}
+                  <p style={{ fontSize: '12px', color: '#d1d5db', marginTop: '8px' }}>
+                    {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+
+                {/* Delete button (shows on hover via CSS class) */}
+                <button
+                  onClick={() => removeTask(t)}
+                  className="delete-btn"
+                  style={{ padding: '8px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#9ca3af', cursor: 'pointer', transition: 'all 0.2s', opacity: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#ef4444'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}
+                >
+                  <Trash2 style={{ width: '16px', height: '16px' }} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '32px' }}>
             <button
-              type="submit"
-              className="px-4 py-2 rounded-full bg-black text-white text-sm hover:scale-105 transition-transform"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', background: 'white', color: page === 1 ? '#d1d5db' : '#374151', cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '500' }}
             >
-              ➕ Add task
+              <ChevronLeft style={{ width: '16px', height: '16px' }} />
+              Prev
+            </button>
+            <span style={{ fontSize: '14px', color: '#6b7280' }}>Page {page} of {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', background: 'white', color: page === totalPages ? '#d1d5db' : '#374151', cursor: page === totalPages ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '500' }}
+            >
+              Next
+              <ChevronRight style={{ width: '16px', height: '16px' }} />
             </button>
           </div>
-        </div>
-      </form>
+        )}
 
-
-      {error && <div className="text-red-600 mb-3">{error}</div>}
-
-      {/* Toolbar */}
-      <div className="mb-6">
-        <div className="bg-gray-50 border rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-4 justify-between">
-
-          {/* Left: Filters */}
-          <div className="flex flex-wrap gap-3 items-center">
-            <select
-              className="px-4 py-2 rounded-full border bg-white text-sm focus:ring-2 focus:ring-gray-900/10"
-              value={completedFilter}
-              onChange={e => {
-                setPage(1);
-                setCompletedFilter(e.target.value);
-              }}
-            >
-              <option value="all">All tasks</option>
-              <option value="true">Completed</option>
-              <option value="false">Incomplete</option>
-            </select>
-
-            <select
-              className="px-4 py-2 rounded-full border bg-white text-sm focus:ring-2 focus:ring-gray-900/10"
-              value={sortOrder}
-              onChange={e => setSortOrder(e.target.value)}
-            >
-              <option value="desc">Newest first</option>
-              <option value="asc">Oldest first</option>
-            </select>
-          </div>
-
-          {/* Right: Pagination */}
-          <div className="flex items-center gap-3">
-            <select
-              className="px-3 py-2 rounded-full border bg-white text-sm"
-              value={limit}
-              onChange={e => {
-                setPage(1);
-                setLimit(Number(e.target.value));
-              }}
-            >
-              <option value={5}>5 / page</option>
-              <option value={10}>10 / page</option>
-              <option value={20}>20 / page</option>
-            </select>
-
-            <div className="flex items-center gap-2 bg-white border rounded-full px-2 py-1">
-              <button
-                className="px-3 py-1 rounded-full text-sm hover:bg-gray-100 disabled:opacity-40"
-                disabled={page === 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-              >
-                Prev
-              </button>
-
-              <span className="text-xs text-gray-500 px-1">
-                Page {page}
-              </span>
-
-              <button
-                className="px-3 py-1 rounded-full text-sm hover:bg-gray-100"
-                onClick={() => setPage(p => p + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-
-      {loading ? (
-        <div>Loading...</div>
-      ) : (
-        <div className="space-y-5">
-          {tasks.length === 0 && <div className="text-sm text-gray-600">No tasks yet</div>}
-          {tasks.map(t => (
-            <div
-              key={t._id}
-              className={`relative rounded-2xl p-4 border shadow-sm transition hover:shadow-md bg-white
-      ${t.completed ? 'opacity-70 bg-gray-50' : ''}`}
-            >
-              {/* Completion stripe */}
-              <div
-                className={`absolute left-0 top-0 h-full w-1 rounded-l-2xl
-        ${t.completed ? 'bg-green-400' : 'bg-yellow-400'}`}
-              />
-
-              <div className="flex justify-between gap-4">
-                {/* Content */}
-                <div className="flex-1 pl-2">
-                  {editingId === t._id ? (
-                    <>
-                      <input
-                        className="w-full mb-2 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900/10"
-                        value={editTitle}
-                        onChange={e => setEditTitle(e.target.value)}
-                      />
-                      <input
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-gray-900/10"
-                        value={editDescription}
-                        onChange={e => setEditDescription(e.target.value)}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <h3
-                        className={`font-medium text-lg ${t.completed ? 'line-through text-gray-500' : ''
-                          }`}
-                      >
-                        {t.title}
-                      </h3>
-
-                      {t.description && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          {t.description}
-                        </p>
-                      )}
-
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(t.createdAt).toLocaleString()}
-                      </p>
-                    </>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col gap-2">
-                  {editingId === t._id ? (
-                    <>
-                      <button
-                        onClick={() => saveEdit(t)}
-                        className="p-2 rounded-lg bg-green-500 text-white hover:scale-105 transition"
-                        title="Save"
-                      >
-                        <Check size={16} />
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="p-2 rounded-lg bg-gray-400 text-white hover:scale-105 transition"
-                        title="Cancel"
-                      >
-                        <X size={16} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => startEdit(t)}
-                        className="p-2 rounded-lg bg-yellow-400 text-white hover:scale-105 transition"
-                        title="Edit"
-                      >
-                        <Pencil size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => toggleComplete(t)}
-                        className={`p-2 rounded-lg text-white hover:scale-105 transition
-                ${t.completed ? 'bg-gray-400' : 'bg-blue-500'}`}
-                        title="Toggle complete"
-                      >
-                        <Check size={16} />
-                      </button>
-
-                      <button
-                        onClick={() => removeTask(t)}
-                        className="p-2 rounded-lg bg-red-500 text-white hover:scale-105 transition"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        <p style={{ textAlign: 'center', fontSize: '12px', color: '#d1d5db', marginTop: '32px' }}>
+          {total} task{total !== 1 ? 's' : ''} total
+        </p>
+      </main>
     </div>
   );
 }
